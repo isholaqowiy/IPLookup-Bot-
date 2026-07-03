@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -133,7 +134,6 @@ async def handle_my_ip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     query = update.callback_query
     await query.answer()
     
-    # Query empty parameter string to fetch server self hosting interface runtime values
     result = await fetch_ip_details("")
     
     if "error" in result:
@@ -148,7 +148,8 @@ async def handle_my_ip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     keyboard = [[InlineKeyboardButton("⬅️ Main Menu", callback_data="menu_home")]]
     await query.edit_message_text(formatted_report, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
-def main():
+async def main_async():
+    """Asynchronous orchestrator initializing the framework cleanly under Python 3.14+."""
     if not BOT_TOKEN:
         logger.error("System crash avoided: Environment Variable 'BOT_TOKEN' is missing.")
         return
@@ -161,7 +162,8 @@ def main():
         states={
             WAITING_FOR_IP: [MessageHandler(filters.TEXT & ~filters.COMMAND, execute_ip_lookup)]
         },
-        fallbacks=[CommandHandler("start", start)]
+        fallbacks=[CommandHandler("start", start)],
+        per_message=True
     )
 
     # Attach command handlers
@@ -176,8 +178,26 @@ def main():
     application.add_handler(CallbackQueryHandler(handle_my_ip, pattern="^btn_my_ip$"))
 
     logger.info("IPLookup Bot engine initialized cleanly. Active long-polling initiated...")
-    application.run_polling()
+    
+    # Explicitly manage modern async loop startup sequence
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+    
+    try:
+        while True:
+            await asyncio.sleep(3600)
+    except (KeyboardInterrupt, SystemExit):
+        await application.updater.stop()
+        await application.stop()
+        await application.shutdown()
+
+def main():
+    """Synchronous framework initialisation wrapping modern async runtimes."""
+    try:
+        asyncio.run(main_async())
+    except Exception as e:
+        logger.critical(f"Bot execution loop crashed: {e}")
 
 if __name__ == "__main__":
     main()
-
